@@ -1,28 +1,24 @@
 import torch
 import torch.nn as nn
-from deepchem.models.torch_models.torch_model import TorchModel
+from deepchem.models.torch_models.torch_model import TorchModel,TorchLitModel
 from deepchem.models.losses import L2Loss
+
 
 
 class LCNNBlock(nn.Module):
   """
   The Lattice Convolution layer of LCNN
-
   The following class implements the lattice convolution function which is
   based on graph convolution networks where,
   [1] Each atom is represented as a node
   [2] Adjacent atom based on distance are considered as neighbors.
-
   Operations in Lattice Convolution:
-
   [1] In graph aggregation step- node features of neighbors are concatenated and
   into a linear layer. But since diffrent permutation of order of neighbors could
   be considered because of which , diffrent permutation of the lattice
   structure are considered in diffrent symmetrical angles (0 , 60 ,120 180 , 240 , 300 )
-
   [2] After the linear layer on each permutations, they are added up for each node and
   each node is transformed into a vector.
-
   Examples
   --------
   >>> import deepchem as dc
@@ -40,7 +36,6 @@ class LCNNBlock(nn.Module):
   >>> x = G.ndata.pop('x')
   >>> print(model(G, x).shape)
   torch.Size([3, 3])
-
   """
 
   def __init__(self,
@@ -51,7 +46,6 @@ class LCNNBlock(nn.Module):
                UseBN: bool = True):
     """
     Lattice Convolution Layer used in the main model
-
     Parameters
     ----------
     input_feature: int
@@ -83,14 +77,12 @@ class LCNNBlock(nn.Module):
   def forward(self, G, node_feats):
     """
     Update node representations.
-
     Parameters
     ----------
     G: DGLGraph
         DGLGraph for a batch of graphs.
     node_feats: torch.Tensor
         The node features. The shape is `(N, Node_feature_size)`.
-
     Returns
     -------
     node_feats: torch.Tensor
@@ -141,17 +133,14 @@ class Atom_Wise_Convolution(nn.Module):
   def forward(self, node_feats):
     """
     Update node representations.
-
     Parameters
     ----------
     node_feats: torch.Tensor
         The node features. The shape is `(N, Node_feature_size)`.
-
     Returns
     -------
     node_feats: torch.Tensor
         The updated node features. The shape is `(N, Node_feature_size)`.
-
     """
 
     node_feats = self.conv_weights(node_feats)
@@ -177,17 +166,14 @@ class Shifted_softplus(nn.Module):
   def forward(self, X):
     """
     Applies the Activation function
-
     Parameters
     ----------
     node_feats: torch.Tensor
         The node features.
-
     Returns
     -------
     node_feats: torch.Tensor
         The updated node features.
-
     """
     node_feats = self.act(X) - self.shift
     return node_feats
@@ -224,25 +210,21 @@ class Custom_dropout(nn.Module):
     return mask * layer
 
 
-class LCNN(nn.Module):
+class LCNN(TorchLitModel):
   """
   The Lattice Convolution Neural Network (LCNN)
-
   This model takes lattice representation of Adsorbate Surface to predict
   coverage effects taking into consideration the adjacent elements interaction
   energies.
-
   The model follows the following steps
-
   [1] It performs n lattice convolution operations. For more details look at the LCNNBlock class
   [2] Followed by Linear layer transforming into sitewise_n_feature
   [3] Transformation to scalar value for each node.
   [4] Average of properties per each element in a configuration
-
   Examples
   --------
   >>> import deepchem as dc
-  >>> from pymatgen.core import Structure
+  >>> from pymatgen import Structure
   >>> import numpy as np
   >>> PRIMITIVE_CELL = {
   ...   "lattice": [[2.818528, 0.0, 0.0],
@@ -299,17 +281,12 @@ class LCNN(nn.Module):
   >>> out = model(lcnn_feat)
   >>> print(type(out))
   <class 'torch.Tensor'>
-
-
   Refrences
   -----------
-
   [1] Jonathan Lym,Geun Ho Gu, Yousung Jung , and Dionisios G. Vlachos
   "Lattice Convolutional Neural Network Modeling of Adsorbate Coverage
   Effects" The Journal of Physical Chemistry
-
   [2] https://forum.deepchem.io/t/lattice-convolutional-neural-network-modeling-of-adsorbate-coverage-effects/124
-
   Notes
   -----
   This class requires DGL and PyTorch to be installed.
@@ -323,11 +300,11 @@ class LCNN(nn.Module):
                dropout_rate: float = 0.2,
                n_conv: int = 2,
                n_features: int = 19,
-               sitewise_n_feature: int = 25):
+               sitewise_n_feature: int = 25,
+               loss=None):
     """
     Parameters
     ----------
-
     n_occupancy: int, default 3
         number of possible occupancy
     n_neighbor_sites_list: int, default 19
@@ -344,9 +321,8 @@ class LCNN(nn.Module):
         number of feature for each site
     sitewise_n_feature: int, default 25
         number of features for atoms for site-wise activation
-
     """
-    super(LCNN, self).__init__()
+    super(LCNN, self).__init__(loss=loss)
 
     modules = [LCNNBlock(n_occupancy * n_neighbor_sites, n_features)]
     for i in range(n_conv - 1):
@@ -365,12 +341,10 @@ class LCNN(nn.Module):
     ----------
     G: DGLGraph
         DGLGraph for a batch of graphs.
-
     Returns
     -------
     y: torch.Tensor
         A single scalar value
-
     """
     try:
       import dgl
@@ -393,7 +367,6 @@ class LCNNModel(TorchModel):
   Lattice Convolutional Neural Network (LCNN).
   Here is a simple example of code that uses the LCNNModel with
   Platinum 2d Adsorption dataset.
-
   This model takes arbitrary configurations of Molecules on an adsorbate and predicts
   their formation energy. These formation energies are found using DFT calculations and
   LCNNModel is to automate that process. This model defines a crystal graph using the
@@ -401,12 +374,11 @@ class LCNNModel(TorchModel):
   and different permutations of the neighbours are pre-computed using the LCNNFeaturizer.
   On each node for each permutation, the neighbour nodes are concatenated which are further operated.
   This model has only a node representation. Please confirm the detail algorithms from [1]_.
-
   Examples
   --------
   >>>
   >> import deepchem as dc
-  >> from pymatgen.core import Structure
+  >> from pymatgen import Structure
   >> import numpy as np
   >> from deepchem.feat import LCNNFeaturizer
   >> from deepchem.molnet import load_Platinum_Adsorption
@@ -441,12 +413,9 @@ class LCNNModel(TorchModel):
   >> model = LCNN()
   >> out = model(lcnn_feat)
   >> model.fit(train, nb_epoch=10)
-
-
   References
   ----------
   .. [1] Jonathan Lym and Geun Ho Gu, J. Phys. Chem. C 2019, 123, 18951−18959.
-
   Notes
   -----
   This class requires DGL and PyTorch to be installed.
@@ -464,10 +433,8 @@ class LCNNModel(TorchModel):
                **kwargs):
     """
     This class accepts all the keyword arguments from TorchModel.
-
     Parameters
     ----------
-
     n_occupancy: int, default 3
         number of possible occupancy.
     n_neighbor_sites_list: int, default 19
@@ -491,24 +458,23 @@ class LCNNModel(TorchModel):
     def init_weights(m):
       if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform_(m.weight)
-
-    model = LCNN(n_occupancy, n_neighbor_sites_list, n_permutation_list, n_task,
-                 dropout_rate, n_conv, n_features, sitewise_n_feature)
-    model.apply(init_weights)
     loss = L2Loss()
     output_types = ['prediction']
+    model = LCNN(n_occupancy, n_neighbor_sites_list, n_permutation_list, n_task,
+                 dropout_rate, n_conv, n_features, sitewise_n_feature,
+                 loss=loss)
+                 
+    model.apply(init_weights)
     super(LCNNModel, self).__init__(
-        model, loss=loss, output_types=output_types, **kwargs)
+        model, output_types=output_types, **kwargs)
 
   def _prepare_batch(self, batch):
     """
     Create batch data for LCNN.
-
     Parameters
     ----------
     batch: Tuple
         The tuple are `(inputs, labels, weights)`.
-
     Returns
     -------
     inputs: DGLGraph
